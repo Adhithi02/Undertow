@@ -1,313 +1,311 @@
 # Undertow
 
-**What's moving beneath the surface — not just the price on top.**
+[Live demo](https://undertow-mocha.vercel.app/) · [Methodology](https://undertow-mocha.vercel.app/how-it-works)
 
-Undertow tracks six independent evidence streams behind each stock (earnings, analyst sentiment, ownership, risk, valuation, and technicals), compares them against your last visit, and surfaces only the shifts that cross a meaningful threshold. Conflicting signals stay visible rather than being averaged into a false consensus. Its experimental **Thesis Fingerprint** also measures whether the current modelled thesis shape is familiar or unusual relative to that stock's available snapshot history.
+Undertow is a working market-watchlist submission built around one product question:
 
-The database, authentication, watchlist, snapshot persistence, change engine, and UI are fully implemented. Market signals are simulated for the demo; prices can be live (Finnhub) or snapshot-based depending on mode.
+> What changed since the user last checked, and which changes require review?
 
----
+The implementation persists a user watchlist and dated thesis snapshots, evaluates six dimensions independently, and returns only threshold-crossing changes. It also includes an experimental, deterministic “Thesis Fingerprint” that identifies when the latest combination of modelled inputs differs from the stock’s own stored history.
 
-## Problem & Approach
+## Requirement coverage
 
-Most watchlists answer *"what is the price?"* Undertow answers *"what changed in the thesis since I last looked?"*
+| Challenge expectation | Undertow’s implementation |
+| --- | --- |
+| Create and manage a watchlist | Email-backed user identity, add/remove symbols, duplicate-safe writes |
+| View current market information | Optional live Finnhub price, otherwise a clearly labelled snapshot price |
+| Return later and understand change | Persistent `lastVisit` baseline and dated `ThesisSnapshot` records |
+| Decide what matters | Per-signal thresholds, severity levels, conflict visibility, attention queue |
+| Handle imperfect data | Explicit first-visit, stale, pending-data, invalid-input, and provider-failure states |
+| Build end-to-end | Next.js UI + API routes + PostgreSQL/Prisma + auth + tests + deployed environment |
+
+## Problem and scope
+
+The brief leaves the definition of a “meaningful” market change open. Undertow interprets it as a material movement in one or more independent thesis dimensions, measured against a persisted user baseline—not a rolling price alert.
 
 | Typical watchlist | Undertow |
 | --- | --- |
-| Price-centric | Evidence-centric |
-| All movement treated equally | Threshold-based meaningful change |
-| Single blended score | Six independent signal evaluators |
-| No visit baseline | `lastVisit`-anchored comparison |
+| “What is the price?” | “What changed in the thesis?” |
+| One blended recommendation | Six independent signal dimensions |
+| Every movement competes for attention | Small deltas are filtered as noise |
+| Agreement is assumed | Conflict is explicitly surfaced |
+| No personal context | Comparison is anchored to the user’s baseline |
 
-The useful unit is a **dated thesis snapshot** — a structured record of evidence at a point in time. Change events are derived on read by comparing the latest snapshot to the one before your last visit.
+The key product choice is to avoid a blended buy/sell score. If earnings improve while analyst sentiment weakens, the interface exposes the disagreement instead of reducing it to a neutral average.
 
----
+## Reviewer walkthrough
 
-## Demo Flow
+1. Open the [live app](https://undertow-mocha.vercel.app/) and sign in with `demo@undertow.local`.
+2. Review the baseline ledger. It is labelled as current modelled state—not fabricated “change since last visit.”
+3. Click **Run guided demo**. It creates three clearly labelled synthetic future snapshots.
+4. Review **What deserves attention**. Items are ranked transparently by severity, conflict, then stale-data risk.
+5. Open **NVDA**. Its earnings and analyst dimensions demonstrate conflict.
+6. Inspect **Thesis Fingerprint**, the historical timeline, current-versus-profile Thesis Shape, and per-dimension contributors.
+7. Review the separate Finnhub analyst-recommendation context when it is available for the configured API plan.
 
-1. **Sign in** with any email (`demo@undertow.local` is pre-seeded).
-2. **Review the ledger** — nine demo symbols with four modelled snapshots each. A first visit shows the baseline, not fabricated changes since last time.
-3. **Toggle Live / Simulated** — live mode fetches Finnhub prices; simulated mode uses snapshot prices.
-4. **Simulate thesis evolution** — creates a synthetic future snapshot with deliberate deltas across all signal fields.
-5. **Reload the watchlist** — independent change summaries appear per symbol (NVDA demonstrates earnings/analyst conflict).
-6. **Open a stock detail page** — inspect the full signal ledger, conflict callouts, historical timeline, Thesis Shape, and Thesis Unusualness.
-7. **Review supplementary context** — when the configured Finnhub plan returns it, a clearly separated analyst recommendation trend appears alongside, never inside, the modelled thesis signal.
+## Data provenance and disclosure
 
----
+The application distinguishes provider data, demo inputs, and derived calculations in the UI and below.
+
+| Category | What Undertow uses | How it is used |
+| --- | --- | --- |
+| **Real, optional** | Finnhub current quote | Watchlist price in Live mode |
+| **Real, optional** | Finnhub analyst recommendation trend | Supplementary context only; never replaces the modelled analyst signal |
+| **Modelled demo data** | Earnings, analyst, ownership, risk, valuation, technical inputs | Seeded and synthetic snapshot fields used to demonstrate the thesis-change workflow |
+| **Derived intelligence** | Thresholds, severity, compounding, decay, Thesis Fingerprint | Deterministic calculations over available snapshots; not predictions or investment advice |
+
+The six thesis inputs are **not** represented as live earnings, consensus, RSI, ownership, litigation, or risk feeds. Thesis Fingerprint is experimental anomaly detection over Undertow’s available snapshot history; it is not trained on external market data and does not predict returns.
+
+## Implementation
+
+### Snapshot comparison and user baseline
+
+Each symbol has dated `ThesisSnapshot` records. Undertow compares the latest snapshot to the most recent snapshot before the user’s stored `lastVisit` baseline.
+
+- First visit: shows current baseline evidence, never fabricated historical changes.
+- Later visit: shows only material per-dimension deltas.
+- Refreshes: retain the existing baseline and therefore the same current change set.
+
+### Independent signal evaluation
+
+| Signal | Snapshot field | Meaningful delta | Favorable direction |
+| --- | --- | --- | --- |
+| Earnings | `epsSurprise` | ≥ 5 percentage points | Higher |
+| Analyst view | `analystScore` | ≥ 5 points | Higher |
+| Ownership | `institutionalOwnership` | ≥ 5 percentage points | Higher |
+| Risk | `riskScore` | ≥ 5 points | Lower |
+| Valuation | `peRatio` | ≥ 5× | Lower |
+| Technicals | `technicalScore` | ≥ 5 points | Higher |
+
+Severity is 1 for a meaningful movement, 2 at a delta of 10 or more, and 3 at 15 or more.
+
+### Cross-signal reasoning
+
+The detail view applies a 72-hour severity half-life. When multiple distinct non-neutral signals are detected inside 48 hours, they compound attention by one level, capped at severity 3. The original evaluator thresholds remain independent of this temporal layer.
+
+### Thesis Fingerprint — experimental ML signal
+
+The existing change engine identifies delta events. Thesis Fingerprint separately measures whether the newest six-dimensional state is atypical for the same symbol’s available snapshot history.
+
+It is an isolated, deterministic anomaly detector:
+
+1. Normalize the six modelled fields onto comparable bounded axes.
+2. Use prior complete snapshots to calculate a historical centroid and per-dimension population standard deviation.
+3. Calculate each standardized departure:
+
+   `dᵢ = |currentᵢ − centroidᵢ| / max(stddevᵢ, 0.10)`
+
+4. Calculate the overall RMS distance across six dimensions.
+5. Convert distance to an unusualness score:
+
+   `round(100 × (1 − exp(−distance / 2)))`
+
+The resulting score is bounded to 0–100: **Normal** (<30), **Watch** (30–59), or **Unusual** (≥60). Each dimension contributes according to its share of squared distance. Two prior complete snapshots are required before scoring begins.
+
+This consumes snapshot history only. It does not change signal thresholds, evaluator semantics, change-engine orchestration, correlation/compounding, or decay mathematics.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-  subgraph Client
-    Dashboard[Dashboard]
-    Detail[Stock detail + Thesis Fingerprint]
+  subgraph Client[Next.js client]
+    Dashboard[Dashboard / attention queue]
+    Detail[Stock detail / fingerprint]
     Guide[Methodology page]
   end
 
-  subgraph API["App Router API"]
-    User["/api/user"]
-    Watchlist["/api/watchlist"]
-    Thesis["/api/stock/:symbol/thesis"]
-    Fingerprint["/api/stock/:symbol/fingerprint"]
-    Context["/api/stock/:symbol/market-context"]
-    Simulate["/api/admin/simulate-time"]
+  subgraph API[App Router API]
+    User[/api/user]
+    Watchlist[/api/watchlist]
+    Thesis[/api/stock/:symbol/thesis]
+    Fingerprint[/api/stock/:symbol/fingerprint]
+    Context[/api/stock/:symbol/market-context]
+    Simulate[/api/admin/simulate-time]
   end
 
-  subgraph Core["Domain layer"]
+  subgraph Domain[Domain layer]
     Engine[ThesisChangeEngine]
-    Evaluators[6 × SignalEvaluator]
-    Correlate[correlateAndDecay]
-    Anomaly[Thesis Fingerprint anomaly detector]
-    Consensus[Finnhub recommendation-trend adapter]
+    Evaluators[6 independent evaluators]
+    Decay[Correlation + decay]
+    Anomaly[Thesis Fingerprint]
+    Finnhub[Finnhub adapters]
   end
 
-  subgraph Data
-    Prisma[(Prisma → PostgreSQL)]
-    Finnhub[Finnhub price API]
+  subgraph Storage[Persistence and providers]
+    DB[(PostgreSQL via Prisma)]
+    Market[Finnhub API]
   end
 
-  Dashboard --> Watchlist
   Dashboard --> User
+  Dashboard --> Watchlist
+  Dashboard --> Simulate
   Detail --> Thesis
   Detail --> Fingerprint
   Detail --> Context
   Watchlist --> Engine
-  Thesis --> Engine
-  Engine --> Evaluators
-  Engine --> Correlate
+  Thesis --> Engine --> Evaluators
+  Thesis --> Decay
   Fingerprint --> Anomaly
-  Context --> Consensus
-  API --> Prisma
+  Context --> Finnhub
   Watchlist --> Finnhub
-  User --> Prisma
+  API --> DB
+  Finnhub --> Market
 ```
 
-**Watchlist read path:**
+### Read paths
 
-1. Authenticate via HMAC-signed HTTP-only cookie.
-2. Load watchlist items and latest `ThesisSnapshot` per symbol (batched, concurrency-capped at 5).
-3. Resolve price by mode: Finnhub (live) or snapshot field (simulated).
-4. Compare current snapshot to the snapshot before the stored `lastVisit` through the change engine.
-5. Return structured JSON validated with Zod. `lastVisit` is written only on a first visit (when it was null) so later refreshes keep the same baseline.
+**Watchlist**
 
-**Fingerprint read path:**
+1. Authenticate with an HMAC-signed, HTTP-only cookie.
+2. Load the user’s watchlist and each latest snapshot in batches of five.
+3. Resolve live Finnhub price or stored snapshot price by selected mode.
+4. Compare the latest snapshot with the pre-baseline snapshot through the unchanged evaluator engine.
+5. Persist `lastVisit` only when a user establishes their first baseline.
 
-1. Authenticate with the same signed session cookie used by the watchlist.
-2. Read up to 25 dated snapshots for the requested symbol; the latest is the current state and the remaining records form the historical profile.
-3. Normalize the six modelled dimensions, calculate their historical centroid and dispersion, then measure the current vector's standardized distance.
-4. Return a read-only experimental signal, a per-dimension contribution breakdown, and a compact snapshot timeline. This endpoint does not alter the existing thesis response contract or the change engine.
+**Fingerprint**
 
-**Market-context read path:**
+1. Read up to 25 snapshots for one symbol.
+2. Treat the newest as current and the remaining complete snapshots as history.
+3. Return unusualness, per-axis contributions, and a timeline through a read-only endpoint.
 
-1. Authenticate with the ordinary signed session cookie.
-2. Read Finnhub's current recommendation-trend record through a 30-second in-memory cache.
-3. Show its buy/hold/sell counts with source, provider-response period, and fetch time as supplementary real data.
-4. Keep this record fully separate from `analystScore`, which remains a modelled thesis input. A missing key, unsupported plan, invalid provider response, or network failure returns an explicitly unavailable context rather than fabricated data.
+**Supplementary real analyst context**
 
----
+1. Read Finnhub’s `GET /stock/recommendation` response through a 30-second in-memory cache.
+2. Present recommendation counts, provider period, source, and fetch time separately from modelled inputs.
+3. Return an explicit unavailable state for a missing key, unsupported plan, malformed response, or provider failure.
 
-## Engineering Design
+## Reliability and edge cases
 
-### SOLID signal engine
-
-| Principle | Implementation |
+| Situation | Behaviour |
 | --- | --- |
-| **Single responsibility** | Each evaluator owns one signal type (`earnings`, `analyst`, …). |
-| **Open/closed** | New signals register in `registry.ts`; orchestration code stays unchanged. |
-| **Dependency inversion** | `ThesisChangeEngine` depends on the `SignalEvaluator` interface, not concrete classes. |
-| **Interface segregation** | Evaluators know nothing about Prisma, HTTP, or cookies. |
+| First visit | Establishes a baseline; does not invent “since last visit” movement |
+| Concurrent first reads | Shared-baseline semantics are tested |
+| Duplicate symbol add | Idempotent no-op |
+| Symbol with no snapshot | Explicit `dataPending` response and UI state |
+| Snapshot older than 24 hours | Data stays visible and receives a stale marker |
+| Finnhub failure | Live price falls back to snapshot price; analyst context reports unavailable |
+| Invalid email or ticker | Zod validation returns an explicit 400 response |
+| Tampered session cookie | Timing-safe HMAC verification rejects it |
+| Larger watchlists | Async snapshot work is concurrency-capped at five |
+| Too little fingerprint history | “History building” is shown instead of a fabricated score |
 
-Evaluators are pure functions over `ThesisSnapshot` pairs. The engine composes them via `flatMap` — no branching on signal type in orchestration logic.
+## Engineering decisions and trade-offs
 
-### Correlation & decay
+- **Persistent baseline, not a refresh timestamp:** a refresh cannot hide a change the user has not reviewed. The trade-off is that `lastVisit` is not a rolling “last page load” marker.
+- **Independent dimensions, not a single score:** preserves conflict and makes the rule behind each briefing entry inspectable. The trade-off is a denser interface.
+- **Deterministic anomaly detection, not a black-box model:** local execution, reproducible outputs, and direct unit tests. It intentionally does not claim predictive validity.
+- **Global snapshots per symbol:** reduces schema and ingestion complexity for the demo. A production design should add source, ownership, and ingestion metadata.
+- **Process-local cache:** bounds provider calls in one deployment instance. A multi-instance deployment needs shared caching and invalidation.
+- **Email-only identity:** keeps the prototype friction low. It is not an appropriate authentication model for a production financial product.
 
-`correlateAndDecay` applies time-based severity decay (72-hour half-life) and flags compounding when multiple non-neutral signals move within a 48-hour window. Threshold logic stays in evaluators; temporal scoring stays separate.
+## Project structure
 
-### Thesis Fingerprint (experimental ML signal)
-
-Thesis Fingerprint is an isolated, deterministic anomaly detector over Undertow's available snapshot history—not a return prediction or a trained external-market model. It consumes existing snapshots and never changes evaluator, threshold, engine, correlation, or decay behavior.
-
-Each dimension is normalized to a bounded axis before historical profiling. For each axis, the detector calculates a centroid and population standard deviation from prior complete snapshots, using a normalized dispersion floor of `0.10` to avoid divide-by-zero behavior. The current standardized departure is:
-
-`dᵢ = |currentᵢ − centroidᵢ| / max(stddevᵢ, 0.10)`
-
-Overall distance is the RMS of six departures. The displayed unusualness score is `round(100 × (1 − exp(−distance / 2)))`, bounded to 0–100: **Normal** is below 30, **Watch** is 30–59, and **Unusual** is 60 or more. Each dimension's contribution is its share of squared distance. At least two prior complete snapshots are required; otherwise the interface reports that the historical profile is still forming.
-
-### Boundary validation
-
-Zod schemas guard API request and response shapes at route boundaries. Invalid input returns explicit 400 responses; output is parsed before send.
-
-### Auth
-
-Email-only identity: `POST /api/user` get-or-creates a `User`, signs the id with HMAC-SHA256, and sets an HTTP-only cookie. Tampered cookies fail `timingSafeEqual` verification. Re-login with the same email restores the same watchlist.
-
-### Price modes
-
-- **Live** → `fetchLivePrice()` (Finnhub, 30s cache); fallback to snapshot price only on API failure.
-- **Simulated** → `ThesisSnapshot.signals.price` only; Finnhub is never called.
-
-Signal comparison and thesis logic are identical in both modes.
-
-### Real supplementary analyst context
-
-`fetchAnalystConsensus()` calls Finnhub's `GET /stock/recommendation` endpoint when `FINNHUB_API_KEY` is configured. Finnhub returns counts for strong buy, buy, hold, sell, and strong sell recommendations by period. Undertow displays these counts only as sourced market context. They are never converted into, persisted as, or used to update the modelled `analystScore` evaluator field.
-
----
-
-## Signal Model
-
-Each evaluator reads one numeric field from a snapshot. Absolute deltas below **5 units** are ignored. Severity escalates at **10** and **15**.
-
-| Signal | Snapshot key | Threshold | Positive direction |
-| --- | --- | --- | --- |
-| Earnings | `epsSurprise` | ≥ 5 pp | Larger EPS surprise |
-| Analyst | `analystScore` | ≥ 5 pts | Higher score |
-| Ownership | `institutionalOwnership` | ≥ 5 pp | More institutional ownership |
-| Risk | `riskScore` | ≥ 5 pts | **Lower** risk score |
-| Valuation | `peRatio` | ≥ 5× | **Lower** P/E ratio |
-| Technical | `technicalScore` | ≥ 5 pts | Higher score |
-
-Severity: `1` (meaningful), `2` (≥ 10), `3` (≥ 15). First visit sets `isFirstVisit: true` rather than fabricating a baseline.
-
-**Simulate-time** advances all seven fields (six signals + price) for every symbol on the watchlist, preserving NVDA's conflicting earnings/analyst pair. The guided demo triggers three synthetic snapshots to make the timeline and Thesis Fingerprint behavior immediately inspectable. Seed data provides four modelled snapshots per demo symbol so the fingerprint has initial history after `npm run db:seed`.
-
----
-
-## Project Structure
-
-```
+```text
 undertow/
 ├── prisma/
-│   ├── migrations/
-│   │   └── 20260904181659_init/
-│   │       └── migration.sql
-│   ├── schema.prisma              # User, WatchlistItem, ThesisSnapshot
-│   └── seed.ts                    # Nine demo symbols + demo user
-│
+│   ├── schema.prisma                 # User, WatchlistItem, ThesisSnapshot
+│   └── seed.ts                       # 9 demo symbols × 4 modelled snapshots
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── admin/
-│   │   │   │   └── simulate-time/route.ts
-│   │   │   ├── briefing/
-│   │   │   │   └── email/route.ts
+│   │   │   ├── admin/simulate-time/  # Synthetic snapshot generator
 │   │   │   ├── stock/[symbol]/
-│   │   │   │   ├── fingerprint/route.ts # Read-only Thesis Fingerprint API
-│   │   │   │   ├── market-context/route.ts # Sourced Finnhub consensus context
-│   │   │   │   └── thesis/route.ts
-│   │   │   ├── watchlist/
-│   │   │   │   ├── [symbol]/route.ts
-│   │   │   │   └── route.ts
-│   │   │   ├── db-health/route.ts
-│   │   │   ├── health/route.ts
-│   │   │   ├── logout/route.ts
-│   │   │   └── user/route.ts
-│   │   ├── how-it-works/
-│   │   │   └── page.tsx
-│   │   ├── stock/[symbol]/
-│   │   │   └── page.tsx
-│   │   ├── globals.css
-│   │   ├── layout.tsx
-│   │   └── page.tsx               # Dashboard entry
-│   │
+│   │   │   │   ├── thesis/           # Change detail
+│   │   │   │   ├── fingerprint/       # Experimental anomaly signal
+│   │   │   │   └── market-context/    # Finnhub recommendation context
+│   │   │   ├── watchlist/             # Read/add/remove watchlist
+│   │   │   └── user, logout, health, db-health, briefing/
+│   │   ├── how-it-works/              # Product methodology
+│   │   └── stock/[symbol]/            # Research-workstation route
 │   ├── components/
-│   │   ├── ChangeBanner.tsx
-│   │   ├── Dashboard.tsx
-│   │   ├── DemoChips.tsx
-│   │   ├── EmptyState.tsx
-│   │   ├── PriceModeLabel.tsx
-│   │   ├── StaleBadge.tsx
-│   │   ├── StockDetail.tsx
-│   │   └── ThesisFingerprint.tsx       # Unusualness, contributors, shape, timeline
-│   │
+│   │   ├── Dashboard.tsx              # Briefing, queue, demo flow
+│   │   ├── StockDetail.tsx            # Thesis workstation
+│   │   └── ThesisFingerprint.tsx      # Shape, timeline, contributors
 │   └── lib/
-│       ├── signals/
-│       │   ├── evaluators/
-│       │   │   ├── analyst.ts
-│       │   │   ├── earnings.ts
-│       │   │   ├── ownership.ts
-│       │   │   ├── risk.ts
-│       │   │   ├── technical.ts
-│       │   │   └── valuation.ts
-│       │   ├── correlate.ts       # Decay & compounding
-│       │   ├── engine.ts          # ThesisChangeEngine
-│       │   ├── registry.ts        # Evaluator composition
-│       │   └── types.ts           # SignalEvaluator interface
-│       ├── auth.ts                # HMAC cookie signing
-│       ├── analyst-context.ts      # Finnhub recommendation-trend adapter
-│       ├── cache.ts               # 30s in-memory TTL
-│       ├── email.ts               # Briefing delivery
-│       ├── fingerprint.ts          # Isolated deterministic anomaly detector
-│       ├── market.ts              # Snapshot helpers, batching
-│       ├── price.ts               # Finnhub live price
-│       └── prisma.ts              # Database client
-│
+│       ├── signals/                   # Engine, registry, evaluators, decay
+│       ├── fingerprint.ts             # Pure anomaly calculation
+│       ├── analyst-context.ts          # Finnhub recommendation adapter
+│       ├── auth.ts, market.ts, price.ts, cache.ts, prisma.ts
 ├── tests/
-│   ├── api/
-│   │   ├── auth-roundtrip.test.ts
-│   │   ├── edge-cases.test.ts
-│   │   ├── health.test.ts
-│   │   ├── routes.test.ts
-│   │   ├── simulate-time-coverage.test.ts
-│   │   ├── watchlist-last-visit.test.ts
-│   │   └── watchlist-price-mode.test.ts
-│   ├── signals/
-│   │   ├── analyst.test.ts
-│   │   ├── correlate.test.ts
-│   │   ├── earnings.test.ts
-│   │   ├── engine.test.ts
-│   │   ├── evidence-language.test.ts
-│   │   ├── ownership.test.ts
-│   │   ├── risk.test.ts
-│   │   ├── technical.test.ts
-│   │   └── valuation.test.ts
-│   ├── auth.test.ts
-│   ├── analyst-context.test.ts     # Real-context response parsing coverage
-│   ├── edge-cases.test.ts
-│   ├── fingerprint.test.ts         # Fingerprint anomaly and determinism coverage
-│   └── price.test.ts
-│
-├── .env.example
-├── .gitignore
-├── next.config.ts
-├── package.json
-├── prisma.config.ts
-├── tsconfig.json
-└── vitest.config.mts
+│   ├── signals/                       # Evaluator, engine, and decay tests
+│   ├── api/                           # Route and baseline semantics tests
+│   ├── fingerprint.test.ts
+│   └── analyst-context.test.ts
+└── README.md
 ```
 
----
+## API surface
 
-## Run Locally
-
-**Prerequisites:** Node.js 20+, a PostgreSQL database (e.g. [Neon](https://neon.tech))
-
-```bash
-git clone <repo-url>
-cd undertow
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
-
-| Variable | Required |
+| Route | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Yes — Postgres connection string |
-| `AUTH_SECRET` or `COOKIE_SECRET` | Yes — any long random string |
+| `POST /api/user` | Create/find email identity and set signed cookie |
+| `POST /api/logout` | Clear signed cookie |
+| `GET/POST /api/watchlist` | Read or add user watchlist symbols |
+| `DELETE /api/watchlist/[symbol]` | Remove a watched symbol |
+| `GET /api/stock/[symbol]/thesis` | Current snapshot, change events, decay/compounding detail |
+| `GET /api/stock/[symbol]/fingerprint` | Experimental unusualness, contributors, snapshot timeline |
+| `GET /api/stock/[symbol]/market-context` | Supplementary Finnhub analyst-recommendation counts |
+| `POST /api/admin/simulate-time` | Create one synthetic future snapshot per selected symbol |
+| `POST /api/briefing/email` | Deliver user-generated briefing through configured SMTP |
+| `GET /api/health` / `GET /api/db-health` | Process and database health checks |
 
-Optional: `FINNHUB_API_KEY` (live prices), `SMTP_*` (email briefing).
+## Local setup
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL database, such as Neon
 
 ```bash
+git clone https://github.com/Adhithi02/pulse.git
+cd pulse
+cp .env.example .env
 npm install
 npx prisma migrate deploy
 npm run db:seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign in with `demo@undertow.local` or any email — the seed creates nine demo symbols on the watchlist.
+Set the following in `.env`:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `AUTH_SECRET` or `COOKIE_SECRET` | Yes | HMAC signing secret for the session cookie |
+| `FINNHUB_API_KEY` | Optional | Live price and supplementary analyst-context requests |
+| `SMTP_*` | Optional | “Email me this briefing” delivery |
+
+Open [http://localhost:3000](http://localhost:3000), sign in with `demo@undertow.local`, and run the guided demo.
+
+## Validation
 
 ```bash
-npm test        # run test suite
-npm run build   # production build check
+npm run test
+npm run build
+npm run lint
 ```
+
+The suite covers signal evaluators, engine composition, decay and compounding, auth-cookie integrity, first-visit baseline semantics, concurrency limits, pending/stale data, API input validation, Finnhub failure handling, Fingerprint bounds/contributions/determinism, and analyst-context parsing.
+
+## Limitations and intentional omissions
+
+- **Modelled inputs:** earnings, analyst score, ownership, risk, valuation, and technical values are demo data. They are not live fundamental, consensus, ownership, technical, or risk feeds.
+- **Provider coverage:** Finnhub recommendation trends are optional and may be unavailable because of symbol coverage or plan access. Their failure does not produce synthetic real-data context.
+- **No external validation of Fingerprint:** unusualness describes distance from stored snapshots; it has not been validated as a predictor of price, returns, or investment outcomes.
+- **Snapshot tenancy:** snapshots are keyed globally by ticker, not by user or data source.
+- **Demo simulation access:** any authenticated user can run the synthetic snapshot generator; there is no role model yet.
+- **Baseline semantics:** the initial baseline persists across refreshes. There is no explicit “mark as reviewed” action to advance it.
+- **Caching and jobs:** cache state is process-local; there are no scheduled ingestion jobs, queueing, retries, or provider observability.
+- **Authentication:** email identity is unverified and not suitable for a production account system.
+- **Testing boundary:** the test suite exercises unit and mocked route behaviour; it does not run browser E2E tests or a real deployed Postgres/Finnhub/SMTP integration test.
+
+## Next steps
+
+1. Add source-attributed real ingestion for one thesis dimension at a time.
+2. Move caching and provider-health reporting to shared infrastructure.
+3. Add verified authentication and roles for production administration.
+4. Introduce source-level freshness and confidence metadata.
+
+---
+
+Undertow is a research-support prototype. It does not provide investment advice, buy/sell recommendations, or return predictions.
