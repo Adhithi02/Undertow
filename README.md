@@ -2,7 +2,7 @@
 
 **What's moving beneath the surface — not just the price on top.**
 
-Undertow tracks six independent evidence streams behind each stock (earnings, analyst sentiment, ownership, risk, valuation, and technicals), compares them against your last visit, and surfaces only the shifts that cross a meaningful threshold. Conflicting signals stay visible rather than being averaged into a false consensus.
+Undertow tracks six independent evidence streams behind each stock (earnings, analyst sentiment, ownership, risk, valuation, and technicals), compares them against your last visit, and surfaces only the shifts that cross a meaningful threshold. Conflicting signals stay visible rather than being averaged into a false consensus. Its experimental **Thesis Fingerprint** also measures whether the current modelled thesis shape is familiar or unusual relative to that stock's available snapshot history.
 
 The database, authentication, watchlist, snapshot persistence, change engine, and UI are fully implemented. Market signals are simulated for the demo; prices can be live (Finnhub) or snapshot-based depending on mode.
 
@@ -28,9 +28,9 @@ The useful unit is a **dated thesis snapshot** — a structured record of eviden
 1. **Sign in** with any email (`demo@undertow.local` is pre-seeded).
 2. **Review the ledger** — nine demo symbols with modelled current stats. A first visit shows the baseline, not fabricated changes since last time.
 3. **Toggle Live / Simulated** — live mode fetches Finnhub prices; simulated mode uses snapshot prices.
-4. **Advance time** — creates newer snapshots with deliberate deltas across all signal fields.
+4. **Simulate thesis evolution** — creates a synthetic future snapshot with deliberate deltas across all signal fields.
 5. **Reload the watchlist** — independent change summaries appear per symbol (NVDA demonstrates earnings/analyst conflict).
-6. **Open a stock detail page** — full signal ledger, conflict callouts, and snapshot evidence.
+6. **Open a stock detail page** — inspect the full signal ledger, conflict callouts, historical timeline, Thesis Shape, and Thesis Unusualness.
 
 ---
 
@@ -39,13 +39,16 @@ The useful unit is a **dated thesis snapshot** — a structured record of eviden
 ```mermaid
 flowchart TB
   subgraph Client
-    UI[Next.js pages & components]
+    Dashboard[Dashboard]
+    Detail[Stock detail + Thesis Fingerprint]
+    Guide[Methodology page]
   end
 
   subgraph API["App Router API"]
     User["/api/user"]
     Watchlist["/api/watchlist"]
     Thesis["/api/stock/:symbol/thesis"]
+    Fingerprint["/api/stock/:symbol/fingerprint"]
     Simulate["/api/admin/simulate-time"]
   end
 
@@ -53,6 +56,7 @@ flowchart TB
     Engine[ThesisChangeEngine]
     Evaluators[6 × SignalEvaluator]
     Correlate[correlateAndDecay]
+    Anomaly[Thesis Fingerprint anomaly detector]
   end
 
   subgraph Data
@@ -60,11 +64,15 @@ flowchart TB
     Finnhub[Finnhub price API]
   end
 
-  UI --> API
+  Dashboard --> Watchlist
+  Dashboard --> User
+  Detail --> Thesis
+  Detail --> Fingerprint
   Watchlist --> Engine
   Thesis --> Engine
   Engine --> Evaluators
   Engine --> Correlate
+  Fingerprint --> Anomaly
   API --> Prisma
   Watchlist --> Finnhub
   User --> Prisma
@@ -77,6 +85,13 @@ flowchart TB
 3. Resolve price by mode: Finnhub (live) or snapshot field (simulated).
 4. Compare current snapshot to the snapshot before the stored `lastVisit` through the change engine.
 5. Return structured JSON validated with Zod. `lastVisit` is written only on a first visit (when it was null) so later refreshes keep the same baseline.
+
+**Fingerprint read path:**
+
+1. Authenticate with the same signed session cookie used by the watchlist.
+2. Read up to 25 dated snapshots for the requested symbol; the latest is the current state and the remaining records form the historical profile.
+3. Normalize the six modelled dimensions, calculate their historical centroid and dispersion, then measure the current vector's standardized distance.
+4. Return a read-only experimental signal, a per-dimension contribution breakdown, and a compact snapshot timeline. This endpoint does not alter the existing thesis response contract or the change engine.
 
 ---
 
@@ -96,6 +111,16 @@ Evaluators are pure functions over `ThesisSnapshot` pairs. The engine composes t
 ### Correlation & decay
 
 `correlateAndDecay` applies time-based severity decay (72-hour half-life) and flags compounding when multiple non-neutral signals move within a 48-hour window. Threshold logic stays in evaluators; temporal scoring stays separate.
+
+### Thesis Fingerprint (experimental ML signal)
+
+Thesis Fingerprint is an isolated, deterministic anomaly detector over Undertow's available snapshot history—not a return prediction or a trained external-market model. It consumes existing snapshots and never changes evaluator, threshold, engine, correlation, or decay behavior.
+
+Each dimension is normalized to a bounded axis before historical profiling. For each axis, the detector calculates a centroid and population standard deviation from prior complete snapshots, using a normalized dispersion floor of `0.10` to avoid divide-by-zero behavior. The current standardized departure is:
+
+`dᵢ = |currentᵢ − centroidᵢ| / max(stddevᵢ, 0.10)`
+
+Overall distance is the RMS of six departures. The displayed unusualness score is `round(100 × (1 − exp(−distance / 2)))`, bounded to 0–100: **Normal** is below 30, **Watch** is 30–59, and **Unusual** is 60 or more. Each dimension's contribution is its share of squared distance. At least two prior complete snapshots are required; otherwise the interface reports that the historical profile is still forming.
 
 ### Boundary validation
 
@@ -152,6 +177,7 @@ undertow/
 │   │   │   ├── briefing/
 │   │   │   │   └── email/route.ts
 │   │   │   ├── stock/[symbol]/
+│   │   │   │   ├── fingerprint/route.ts # Read-only Thesis Fingerprint API
 │   │   │   │   └── thesis/route.ts
 │   │   │   ├── watchlist/
 │   │   │   │   ├── [symbol]/route.ts
@@ -175,7 +201,8 @@ undertow/
 │   │   ├── EmptyState.tsx
 │   │   ├── PriceModeLabel.tsx
 │   │   ├── StaleBadge.tsx
-│   │   └── StockDetail.tsx
+│   │   ├── StockDetail.tsx
+│   │   └── ThesisFingerprint.tsx       # Unusualness, contributors, shape, timeline
 │   │
 │   └── lib/
 │       ├── signals/
@@ -193,6 +220,7 @@ undertow/
 │       ├── auth.ts                # HMAC cookie signing
 │       ├── cache.ts               # 30s in-memory TTL
 │       ├── email.ts               # Briefing delivery
+│       ├── fingerprint.ts          # Isolated deterministic anomaly detector
 │       ├── market.ts              # Snapshot helpers, batching
 │       ├── price.ts               # Finnhub live price
 │       └── prisma.ts              # Database client
@@ -218,6 +246,7 @@ undertow/
 │   │   └── valuation.test.ts
 │   ├── auth.test.ts
 │   ├── edge-cases.test.ts
+│   ├── fingerprint.test.ts         # Fingerprint anomaly and determinism coverage
 │   └── price.test.ts
 │
 ├── .env.example
