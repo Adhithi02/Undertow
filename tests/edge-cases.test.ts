@@ -11,6 +11,9 @@ describe("edge-case invariants", () => {
   it("renders current state on a first visit", () => {
     const result = new EarningsEvaluator().evaluate(null, { symbol: "AAPL", fetchedAt: new Date(), signals: { epsSurprise: 12 } });
     expect(result[0].isFirstVisit).toBe(true);
+    expect(result[0].summary).toMatch(/baseline/i);
+    expect(result[0].summary).not.toMatch(/since last visit/i);
+    expect(result[0].summary).not.toMatch(/versus consensus/i);
   });
 
   it("keeps conflicting signals independent", () => {

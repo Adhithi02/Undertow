@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
 
-export const AUTH_COOKIE_NAME = "pulse_user";
+export const AUTH_COOKIE_NAME = "undertow_user";
 
 export type UserRecord = { id: string; email: string; lastVisit?: Date | null };
 

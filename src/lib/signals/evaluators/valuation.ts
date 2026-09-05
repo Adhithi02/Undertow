@@ -1,5 +1,9 @@
 import { SignalEvaluator, ThesisChange, ThesisSnapshot } from "../types";
 
+export const VALUATION_MEANINGFUL = 5;
+export const VALUATION_SEVERITY_2 = 10;
+export const VALUATION_SEVERITY_3 = 15;
+
 export class ValuationEvaluator implements SignalEvaluator {
   readonly type = "valuation";
 
@@ -12,7 +16,7 @@ export class ValuationEvaluator implements SignalEvaluator {
         type: this.type,
         direction: currPe < 0 ? "positive" : currPe > 0 ? "negative" : "neutral",
         severity: currPe >= 30 ? 2 : 1,
-        summary: `Current P/E ratio is ${currPe}`,
+        summary: `P/E is ${currPe} relative to the modeled valuation baseline. Stretch versus that baseline is the first thing a holder pays for.`,
         isFirstVisit: true,
       }];
     }
@@ -20,13 +24,16 @@ export class ValuationEvaluator implements SignalEvaluator {
     const prevPe = prev.signals.peRatio as number | undefined;
     if (prevPe === undefined || currPe === prevPe) return [];
     const delta = currPe - prevPe;
-    if (Math.abs(delta) < 5) return [];
+    if (Math.abs(delta) < VALUATION_MEANINGFUL) return [];
+    const impact = delta > 0
+      ? "increasing downside sensitivity if expected growth does not materialize."
+      : "giving more room if the story takes longer than hoped.";
 
     return [{
       type: this.type,
       direction: delta < 0 ? "positive" : "negative",
-      severity: Math.abs(delta) >= 15 ? 3 : Math.abs(delta) >= 10 ? 2 : 1,
-      summary: `P/E ratio shifted by ${delta > 0 ? "+" : ""}${delta}`,
+      severity: Math.abs(delta) >= VALUATION_SEVERITY_3 ? 3 : Math.abs(delta) >= VALUATION_SEVERITY_2 ? 2 : 1,
+      summary: `P/E ${delta > 0 ? "increased" : "decreased"} materially relative to the modeled valuation baseline, ${impact}`,
       isFirstVisit: false,
     }];
   }

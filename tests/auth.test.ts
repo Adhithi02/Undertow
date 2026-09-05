@@ -15,7 +15,7 @@ describe("email-only auth", () => {
     const users = new Map<string, { id: string; email: string }>();
     const store: UserStore = {
       user: {
-        upsert: async ({ where, create, select }) => {
+        upsert: async ({ where, create }) => {
           const user = users.get(where.email) ?? { id: "user_123", email: create.email };
           users.set(where.email, user);
           return { id: user.id, email: user.email };
@@ -34,7 +34,7 @@ describe("email-only auth", () => {
   it("clears the auth cookie on logout", async () => {
     const response = await logout();
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("pulse_user=");
+    expect(response.headers.get("set-cookie")).toContain("undertow_user=");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

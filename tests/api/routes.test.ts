@@ -26,7 +26,7 @@ const state = vi.hoisted(() => {
 
 vi.mock("@/lib/prisma", () => ({ prisma: state.prisma }));
 vi.mock("@/lib/auth", () => ({
-  AUTH_COOKIE_NAME: "pulse_user",
+  AUTH_COOKIE_NAME: "undertow_user",
   getCurrentUser: vi.fn(async () => state.user),
   getOrCreateUser: vi.fn(async (email: string) => ({ id: state.user.id, email })),
   signUserId: vi.fn(() => "signed-user"),
@@ -47,14 +47,15 @@ describe("API routes", () => {
     expect(getOrCreateUser).toHaveBeenCalled();
     expect(signUserId).toHaveBeenCalled();
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("pulse_user=signed-user");
+    expect(response.headers.get("set-cookie")).toContain("undertow_user=signed-user");
   });
 
-  it("integrates GET /api/watchlist and updates lastVisit", async () => {
+  it("integrates GET /api/watchlist and records lastVisit on first visit", async () => {
     const response = await getWatchlist();
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.items[0].symbol).toBe("AAPL");
+    expect(body.baselineAt).toBeNull();
     expect(state.prisma.user.update).toHaveBeenCalled();
   });
 

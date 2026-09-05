@@ -13,7 +13,7 @@ const state = vi.hoisted(() => {
     technicalScore: 5,
   };
   const seededSymbols = ["AAPL", "NVDA", "MSFT", "AMZN", "TSLA", "COST", "JPM", "LLY", "NFLX"] as const;
-  const user = { id: "user_1", email: "demo@pulse.local", lastVisit: null as Date | null };
+  const user = { id: "user_1", email: "demo@undertow.local", lastVisit: null as Date | null };
   const snapshots = new Map<string, { id: string; symbol: string; fetchedAt: Date; signals: Record<string, number> }>(
     seededSymbols.map(symbol => [symbol, { id: `snapshot_${symbol}`, symbol, fetchedAt: new Date("2026-09-04T00:00:00.000Z"), signals: { ...baseSignals } }]),
   );

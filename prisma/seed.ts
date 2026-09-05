@@ -19,7 +19,7 @@ const symbols = [
 ] as const;
 
 async function main() {
-  const user = await prisma.user.upsert({ where: { email: "demo@pulse.local" }, update: { lastVisit: null }, create: { email: "demo@pulse.local" } });
+  const user = await prisma.user.upsert({ where: { email: "demo@undertow.local" }, update: { lastVisit: null }, create: { email: "demo@undertow.local" } });
   await prisma.watchlistItem.deleteMany({ where: { userId: user.id } });
   for (const [symbol, signals] of symbols) {
     await prisma.watchlistItem.create({ data: { userId: user.id, symbol } });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { changesSince, inChunks, isStale, latestSnapshot, normalizeSymbol, previousSnapshot, requireUser, symbolSchema, toSnapshot } from "@/lib/market";
+import { changesSince, inChunks, isStale, latestSnapshot, previousSnapshot, requireUser, symbolSchema, toSnapshot } from "@/lib/market";
 import { cached } from "@/lib/cache";
 import { fetchLivePrice } from "@/lib/price";
 
@@ -19,7 +19,7 @@ export async function GET(request?: Request) {
 
   const mode = new URL(request?.url ?? "http://localhost/api/watchlist").searchParams.get("mode") === "simulated" ? "simulated" : "live";
 
-  const lastVisit = user.lastVisit;
+  const baselineAt = user.lastVisit;
   const items = await prisma.watchlistItem.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
   const result = await inChunks(items, async item => {
     const [latest, livePrice] = await Promise.all([
@@ -34,14 +34,16 @@ export async function GET(request?: Request) {
     const displayPrice = mode === "simulated" ? snapshotPrice : livePrice ?? snapshotPrice;
     if (!latest) return { id: item.id, symbol: item.symbol, createdAt: item.createdAt.toISOString(), price: displayPrice, currentStats: { epsSurprise: null, analystScore: null, riskScore: null, peRatio: null, technicalScore: null }, changes: [], dataPending: true, stale: false, fetchedAt: null };
     const current = toSnapshot(latest);
-    const previous = lastVisit ? await previousSnapshot(item.symbol, lastVisit) : null;
+    const previous = baselineAt ? await previousSnapshot(item.symbol, baselineAt) : null;
     const changes = changesSince(current, previous ? toSnapshot(previous) : null);
     const numberOrNull = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
     return { id: item.id, symbol: item.symbol, createdAt: item.createdAt.toISOString(), price: displayPrice, currentStats: { epsSurprise: numberOrNull(current.signals.epsSurprise), analystScore: numberOrNull(current.signals.analystScore), riskScore: numberOrNull(current.signals.riskScore), peRatio: numberOrNull(current.signals.peRatio), technicalScore: numberOrNull(current.signals.technicalScore) }, changes, dataPending: false, stale: isStale(latest.fetchedAt), fetchedAt: latest.fetchedAt.toISOString() };
   });
   const visitedAt = new Date();
-  await prisma.user.update({ where: { id: user.id }, data: { lastVisit: visitedAt } });
-  return NextResponse.json(outputSchema.parse({ items: result, lastVisit: visitedAt.toISOString(), baselineAt: lastVisit?.toISOString() ?? null }));
+  if (!baselineAt) {
+    await prisma.user.update({ where: { id: user.id }, data: { lastVisit: visitedAt } });
+  }
+  return NextResponse.json(outputSchema.parse({ items: result, lastVisit: visitedAt.toISOString(), baselineAt: baselineAt?.toISOString() ?? null }));
 }
 
 export async function POST(request: Request) {

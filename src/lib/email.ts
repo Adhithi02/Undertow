@@ -19,7 +19,12 @@ export async function sendBriefingEmail(to: string, text: string): Promise<boole
       secure: config.port === 465,
       auth: { user: config.user, pass: config.password },
     });
-    await transporter.sendMail({ from: config.user, to, subject: "Your Pulse briefing", text });
+    await transporter.sendMail({
+      from: { name: "Undertow", address: config.user },
+      to,
+      subject: "What moved beneath the surface",
+      text,
+    });
     return true;
   } catch {
     return false;

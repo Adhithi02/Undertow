@@ -1,8 +1,8 @@
-# Pulse
+# Undertow
 
-**A thesis-aware market watchlist that records what meaningfully changed — not just what moved.**
+**What's moving beneath the surface — not just the price on top.**
 
-Pulse tracks six independent evidence streams behind each stock (earnings, analyst sentiment, ownership, risk, valuation, and technicals), compares them against your last visit, and surfaces only the shifts that cross a meaningful threshold. Conflicting signals stay visible rather than being averaged into a false consensus.
+Undertow tracks six independent evidence streams behind each stock (earnings, analyst sentiment, ownership, risk, valuation, and technicals), compares them against your last visit, and surfaces only the shifts that cross a meaningful threshold. Conflicting signals stay visible rather than being averaged into a false consensus.
 
 The database, authentication, watchlist, snapshot persistence, change engine, and UI are fully implemented. Market signals are simulated for the demo; prices can be live (Finnhub) or snapshot-based depending on mode.
 
@@ -10,9 +10,9 @@ The database, authentication, watchlist, snapshot persistence, change engine, an
 
 ## Problem & Approach
 
-Most watchlists answer *"what is the price?"* Pulse answers *"what changed in the thesis since I last looked?"*
+Most watchlists answer *"what is the price?"* Undertow answers *"what changed in the thesis since I last looked?"*
 
-| Typical watchlist | Pulse |
+| Typical watchlist | Undertow |
 | --- | --- |
 | Price-centric | Evidence-centric |
 | All movement treated equally | Threshold-based meaningful change |
@@ -25,8 +25,8 @@ The useful unit is a **dated thesis snapshot** — a structured record of eviden
 
 ## Demo Flow
 
-1. **Sign in** with any email (`demo@pulse.local` is pre-seeded).
-2. **Review the ledger** — nine demo symbols with current stats and changes since your last visit.
+1. **Sign in** with any email (`demo@undertow.local` is pre-seeded).
+2. **Review the ledger** — nine demo symbols with modelled current stats. A first visit shows the baseline, not fabricated changes since last time.
 3. **Toggle Live / Simulated** — live mode fetches Finnhub prices; simulated mode uses snapshot prices.
 4. **Advance time** — creates newer snapshots with deliberate deltas across all signal fields.
 5. **Reload the watchlist** — independent change summaries appear per symbol (NVDA demonstrates earnings/analyst conflict).
@@ -75,8 +75,8 @@ flowchart TB
 1. Authenticate via HMAC-signed HTTP-only cookie.
 2. Load watchlist items and latest `ThesisSnapshot` per symbol (batched, concurrency-capped at 5).
 3. Resolve price by mode: Finnhub (live) or snapshot field (simulated).
-4. Compare current snapshot to pre-`lastVisit` snapshot through the change engine.
-5. Update `lastVisit` and return structured JSON validated with Zod.
+4. Compare current snapshot to the snapshot before the stored `lastVisit` through the change engine.
+5. Return structured JSON validated with Zod. `lastVisit` is written only on a first visit (when it was null) so later refreshes keep the same baseline.
 
 ---
 
@@ -136,7 +136,7 @@ Severity: `1` (meaningful), `2` (≥ 10), `3` (≥ 15). First visit sets `isFirs
 ## Project Structure
 
 ```
-pulse/
+undertow/
 ├── prisma/
 │   ├── migrations/
 │   │   └── 20260904181659_init/
@@ -171,6 +171,7 @@ pulse/
 │   ├── components/
 │   │   ├── ChangeBanner.tsx
 │   │   ├── Dashboard.tsx
+│   │   ├── DemoChips.tsx
 │   │   ├── EmptyState.tsx
 │   │   ├── PriceModeLabel.tsx
 │   │   ├── StaleBadge.tsx
@@ -203,12 +204,14 @@ pulse/
 │   │   ├── health.test.ts
 │   │   ├── routes.test.ts
 │   │   ├── simulate-time-coverage.test.ts
+│   │   ├── watchlist-last-visit.test.ts
 │   │   └── watchlist-price-mode.test.ts
 │   ├── signals/
 │   │   ├── analyst.test.ts
 │   │   ├── correlate.test.ts
 │   │   ├── earnings.test.ts
 │   │   ├── engine.test.ts
+│   │   ├── evidence-language.test.ts
 │   │   ├── ownership.test.ts
 │   │   ├── risk.test.ts
 │   │   ├── technical.test.ts
@@ -234,7 +237,7 @@ pulse/
 
 ```bash
 git clone <repo-url>
-cd pulse
+cd undertow
 cp .env.example .env
 ```
 
@@ -254,7 +257,7 @@ npm run db:seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign in with `demo@pulse.local` or any email — the seed creates nine demo symbols on the watchlist.
+Open [http://localhost:3000](http://localhost:3000). Sign in with `demo@undertow.local` or any email — the seed creates nine demo symbols on the watchlist.
 
 ```bash
 npm test        # run test suite

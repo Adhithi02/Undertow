@@ -13,9 +13,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pulse — Smart Market Watchlist",
+  title: "Undertow",
   description:
-    "Track what meaningfully changed about your stocks since you last checked.",
+    "Track what meaningfully changed beneath the surface since you last checked.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
