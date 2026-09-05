@@ -26,11 +26,12 @@ The useful unit is a **dated thesis snapshot** — a structured record of eviden
 ## Demo Flow
 
 1. **Sign in** with any email (`demo@undertow.local` is pre-seeded).
-2. **Review the ledger** — nine demo symbols with modelled current stats. A first visit shows the baseline, not fabricated changes since last time.
+2. **Review the ledger** — nine demo symbols with four modelled snapshots each. A first visit shows the baseline, not fabricated changes since last time.
 3. **Toggle Live / Simulated** — live mode fetches Finnhub prices; simulated mode uses snapshot prices.
 4. **Simulate thesis evolution** — creates a synthetic future snapshot with deliberate deltas across all signal fields.
 5. **Reload the watchlist** — independent change summaries appear per symbol (NVDA demonstrates earnings/analyst conflict).
 6. **Open a stock detail page** — inspect the full signal ledger, conflict callouts, historical timeline, Thesis Shape, and Thesis Unusualness.
+7. **Review supplementary context** — when the configured Finnhub plan returns it, a clearly separated analyst recommendation trend appears alongside, never inside, the modelled thesis signal.
 
 ---
 
@@ -49,6 +50,7 @@ flowchart TB
     Watchlist["/api/watchlist"]
     Thesis["/api/stock/:symbol/thesis"]
     Fingerprint["/api/stock/:symbol/fingerprint"]
+    Context["/api/stock/:symbol/market-context"]
     Simulate["/api/admin/simulate-time"]
   end
 
@@ -57,6 +59,7 @@ flowchart TB
     Evaluators[6 × SignalEvaluator]
     Correlate[correlateAndDecay]
     Anomaly[Thesis Fingerprint anomaly detector]
+    Consensus[Finnhub recommendation-trend adapter]
   end
 
   subgraph Data
@@ -68,11 +71,13 @@ flowchart TB
   Dashboard --> User
   Detail --> Thesis
   Detail --> Fingerprint
+  Detail --> Context
   Watchlist --> Engine
   Thesis --> Engine
   Engine --> Evaluators
   Engine --> Correlate
   Fingerprint --> Anomaly
+  Context --> Consensus
   API --> Prisma
   Watchlist --> Finnhub
   User --> Prisma
@@ -92,6 +97,13 @@ flowchart TB
 2. Read up to 25 dated snapshots for the requested symbol; the latest is the current state and the remaining records form the historical profile.
 3. Normalize the six modelled dimensions, calculate their historical centroid and dispersion, then measure the current vector's standardized distance.
 4. Return a read-only experimental signal, a per-dimension contribution breakdown, and a compact snapshot timeline. This endpoint does not alter the existing thesis response contract or the change engine.
+
+**Market-context read path:**
+
+1. Authenticate with the ordinary signed session cookie.
+2. Read Finnhub's current recommendation-trend record through a 30-second in-memory cache.
+3. Show its buy/hold/sell counts with source, provider-response period, and fetch time as supplementary real data.
+4. Keep this record fully separate from `analystScore`, which remains a modelled thesis input. A missing key, unsupported plan, invalid provider response, or network failure returns an explicitly unavailable context rather than fabricated data.
 
 ---
 
@@ -137,6 +149,10 @@ Email-only identity: `POST /api/user` get-or-creates a `User`, signs the id with
 
 Signal comparison and thesis logic are identical in both modes.
 
+### Real supplementary analyst context
+
+`fetchAnalystConsensus()` calls Finnhub's `GET /stock/recommendation` endpoint when `FINNHUB_API_KEY` is configured. Finnhub returns counts for strong buy, buy, hold, sell, and strong sell recommendations by period. Undertow displays these counts only as sourced market context. They are never converted into, persisted as, or used to update the modelled `analystScore` evaluator field.
+
 ---
 
 ## Signal Model
@@ -154,7 +170,7 @@ Each evaluator reads one numeric field from a snapshot. Absolute deltas below **
 
 Severity: `1` (meaningful), `2` (≥ 10), `3` (≥ 15). First visit sets `isFirstVisit: true` rather than fabricating a baseline.
 
-**Simulate-time** advances all seven fields (six signals + price) for every symbol on the watchlist, preserving NVDA's conflicting earnings/analyst pair.
+**Simulate-time** advances all seven fields (six signals + price) for every symbol on the watchlist, preserving NVDA's conflicting earnings/analyst pair. The guided demo triggers three synthetic snapshots to make the timeline and Thesis Fingerprint behavior immediately inspectable. Seed data provides four modelled snapshots per demo symbol so the fingerprint has initial history after `npm run db:seed`.
 
 ---
 
@@ -178,6 +194,7 @@ undertow/
 │   │   │   │   └── email/route.ts
 │   │   │   ├── stock/[symbol]/
 │   │   │   │   ├── fingerprint/route.ts # Read-only Thesis Fingerprint API
+│   │   │   │   ├── market-context/route.ts # Sourced Finnhub consensus context
 │   │   │   │   └── thesis/route.ts
 │   │   │   ├── watchlist/
 │   │   │   │   ├── [symbol]/route.ts
@@ -218,6 +235,7 @@ undertow/
 │       │   ├── registry.ts        # Evaluator composition
 │       │   └── types.ts           # SignalEvaluator interface
 │       ├── auth.ts                # HMAC cookie signing
+│       ├── analyst-context.ts      # Finnhub recommendation-trend adapter
 │       ├── cache.ts               # 30s in-memory TTL
 │       ├── email.ts               # Briefing delivery
 │       ├── fingerprint.ts          # Isolated deterministic anomaly detector
@@ -245,6 +263,7 @@ undertow/
 │   │   ├── technical.test.ts
 │   │   └── valuation.test.ts
 │   ├── auth.test.ts
+│   ├── analyst-context.test.ts     # Real-context response parsing coverage
 │   ├── edge-cases.test.ts
 │   ├── fingerprint.test.ts         # Fingerprint anomaly and determinism coverage
 │   └── price.test.ts

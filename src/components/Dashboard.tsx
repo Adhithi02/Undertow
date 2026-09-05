@@ -119,7 +119,14 @@ export default function Dashboard() {
     setBusy(false);
   }
   async function addSymbol(event: FormEvent) { event.preventDefault(); await recordSymbol(symbol); }
-  async function simulate() { setBusy(true); await fetch("/api/admin/simulate-time", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ minutes: 5 }) }); await loadWatchlist(); setMessage("A new market moment is ready to review."); setBusy(false); }
+  async function simulate() {
+    setBusy(true);
+    try {
+      await Promise.all([5, 10, 15].map(minutes => fetch("/api/admin/simulate-time", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ minutes }) })));
+      await loadWatchlist();
+      setMessage("Three synthetic snapshots are ready: inspect NVDA for conflict and Thesis Fingerprint change.");
+    } catch { setMessage("The synthetic demo could not be generated. Try again."); } finally { setBusy(false); }
+  }
   async function removeSymbol(stock: string) { setBusy(true); await fetch(`/api/watchlist/${stock}`, { method: "DELETE" }); await loadWatchlist(); setMessage(`${stock} removed from the ledger.`); setBusy(false); }
   async function changeMode(mode: "live" | "simulated") {
     setDataMode(mode);
@@ -163,6 +170,10 @@ export default function Dashboard() {
     : `?since=${encodeURIComponent("1970-01-01T00:00:00.000Z")}&mode=${dataMode}`;
   const conflictItem = firstLook ? undefined : items.find(item => hasConflict(item.changes.filter(change => !change.isFirstVisit)));
   const topItems = [...items].sort((a, b) => (Math.max(...b.changes.map(change => change.severity), 0) - Math.max(...a.changes.map(change => change.severity), 0)) || b.changes.length - a.changes.length);
+  const attentionQueue = [...items].filter(item => !item.dataPending).sort((left, right) => {
+    const score = (item: WatchItem) => Math.max(...item.changes.map(change => change.severity), 0) * 10 + (hasConflict(item.changes) ? 5 : 0) + (item.stale ? 2 : 0);
+    return score(right) - score(left);
+  }).slice(0, 3);
   const lastVisit = watchlist?.baselineAt ? new Date(watchlist.baselineAt) : null;
   const now = watchlist ? new Date(watchlist.lastVisit) : null;
 
@@ -179,9 +190,10 @@ export default function Dashboard() {
         <p className="attention-summary"><span className="attention-positive">{attentionSummary.positive} positive</span><span className="attention-negative">{attentionSummary.negative} negative</span><span className="attention-conflict">{attentionSummary.conflicts} conflict{attentionSummary.conflicts === 1 ? "" : "s"}</span></p>
       </section>
       <section className="simulation-panel" aria-label="Synthetic thesis evolution demo">
-        <div><p className="mono">Modelled demo flow</p><h2>Simulate thesis evolution</h2><p>Generate a synthetic future snapshot to see how Undertow separates signal movement from signal noise.</p><div className="simulation-steps"><span>Baseline</span><i>→</i><span>New snapshot</span><i>→</i><span>Change detected</span><i>→</i><span>Fingerprint updated</span></div></div>
-        <button onClick={simulate} disabled={busy}>{busy ? "Updating snapshot..." : "Simulate change"}</button>
+        <div><p className="mono">Guided modelled demo</p><h2>Simulate thesis evolution</h2><p>Generate three synthetic future snapshots, then open NVDA to review a visible conflict and its updated Thesis Fingerprint.</p><div className="simulation-steps"><span>1. Baseline</span><i>→</i><span>2. Three snapshots</span><i>→</i><span>3. Change detected</span><i>→</i><span>4. Fingerprint updated</span></div></div>
+        <button onClick={simulate} disabled={busy}>{busy ? "Generating snapshots..." : "Run guided demo"}</button>
       </section>
+      {!firstLook && attentionQueue.length > 0 && <section className="attention-queue" aria-labelledby="attention-queue-heading"><div className="attention-queue-heading"><div><p className="mono">Priority review</p><h2 id="attention-queue-heading">What deserves attention</h2></div><p>Ranked transparently by change severity, recorded conflict, then stale-data risk. Open a record to inspect Thesis Unusualness.</p></div><div className="attention-queue-items">{attentionQueue.map((item, index) => { const severity = Math.max(...item.changes.map(change => change.severity), 0); const conflict = hasConflict(item.changes); return <Link key={item.id} className="attention-queue-item" href={`/stock/${item.symbol}${baselineQuery}`}><span className="mono">0{index + 1}</span><strong>{item.symbol}</strong><div className="attention-badges"><em>{severity ? `severity ${severity}/3` : "quiet"}</em>{conflict && <b>conflict</b>}{item.stale && <b>stale</b>}</div><i>Open ↗</i></Link>; })}</div></section>}
       <section className="ledger-controls"><div className="ledger-add"><form onSubmit={addSymbol} className="add-ledger-form"><span>+</span><input ref={addRef} value={symbol} onChange={event => setSymbol(event.target.value)} placeholder="Add a symbol" aria-label="Symbol to track" /><button disabled={busy}>Record</button></form><DemoChips onPick={recordSymbol} disabled={busy} /></div><span className="mono control-date">{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span></section>
       {message && <p className="ledger-message">{message}</p>}
       {items.length === 0 ? <EmptyState onAdd={() => addRef.current?.focus()} onPick={recordSymbol} disabled={busy} /> : <>

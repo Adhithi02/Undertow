@@ -6,7 +6,7 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 const before = new Date("2026-09-04T12:00:00.000Z");
 
-const symbols = [
+const symbols: Array<[string, Record<string, number>]> = [
   ["AAPL", { price: 228, epsSurprise: 4, analystScore: 6, institutionalOwnership: 2, riskScore: 3, peRatio: 28, technicalScore: 5 }],
   ["NVDA", { price: 142, epsSurprise: 8, analystScore: -7, institutionalOwnership: 4, riskScore: 2, peRatio: 34, technicalScore: 9 }],
   ["MSFT", { price: 512, epsSurprise: 3, analystScore: 5, institutionalOwnership: 1, riskScore: -2, peRatio: 31, technicalScore: 4 }],
@@ -16,7 +16,23 @@ const symbols = [
   ["JPM", { price: 291, epsSurprise: 6, analystScore: 3, institutionalOwnership: 5, riskScore: -3, peRatio: 14, technicalScore: 6 }],
   ["LLY", { price: 811, epsSurprise: 7, analystScore: 8, institutionalOwnership: 4, riskScore: 6, peRatio: 58, technicalScore: 10 }],
   ["NFLX", { price: 742, epsSurprise: 1, analystScore: 6, institutionalOwnership: 3, riskScore: 2, peRatio: 39, technicalScore: 5 }],
-] as const;
+];
+
+const historySteps = [-3, 2, -1] as const;
+
+function historicalSignals(current: Record<string, number>, step: number, symbolIndex: number): Record<string, number> {
+  const variation = symbolIndex % 2 === 0 ? 1 : -1;
+  return {
+    ...current,
+    price: Math.max(1, current.price + step * 2),
+    epsSurprise: current.epsSurprise + step * variation,
+    analystScore: current.analystScore - step,
+    institutionalOwnership: current.institutionalOwnership + step * variation,
+    riskScore: current.riskScore - step * variation,
+    peRatio: Math.max(1, current.peRatio + step),
+    technicalScore: current.technicalScore + step * variation,
+  };
+}
 
 async function main() {
   const user = await prisma.user.upsert({ where: { email: "demo@undertow.local" }, update: { lastVisit: null }, create: { email: "demo@undertow.local" } });
@@ -24,9 +40,19 @@ async function main() {
   for (const [symbol, signals] of symbols) {
     await prisma.watchlistItem.create({ data: { userId: user.id, symbol } });
     await prisma.thesisSnapshot.deleteMany({ where: { symbol } });
+    const symbolIndex = symbols.findIndex(([candidate]) => candidate === symbol);
+    for (const [index, step] of historySteps.entries()) {
+      await prisma.thesisSnapshot.create({
+        data: {
+          symbol,
+          fetchedAt: new Date(before.getTime() - (historySteps.length - index) * 24 * 60 * 60 * 1000),
+          signals: historicalSignals(signals, step, symbolIndex),
+        },
+      });
+    }
     await prisma.thesisSnapshot.create({ data: { symbol, fetchedAt: before, signals } });
   }
-  console.log(`Seeded ${symbols.length} symbols for ${user.email}.`);
+  console.log(`Seeded ${symbols.length} symbols with four modelled snapshots each for ${user.email}.`);
 }
 
 main().finally(() => prisma.$disconnect());
