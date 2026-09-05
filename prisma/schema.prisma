@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  lastVisit DateTime?
+  watchlist WatchlistItem[]
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  symbol    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, symbol])
+}
+
+model ThesisSnapshot {
+  id        String   @id @default(cuid())
+  symbol    String
+  fetchedAt DateTime
+  signals   Json
+
+  @@index([symbol, fetchedAt])
+}
