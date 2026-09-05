@@ -108,48 +108,57 @@ This consumes snapshot history only. It does not change signal thresholds, evalu
 
 ```mermaid
 flowchart TB
-  subgraph Client[Next.js client]
-    Dashboard[Dashboard / attention queue]
-    Detail[Stock detail / fingerprint]
-    Guide[Methodology page]
+  subgraph client[Next.js client]
+    dashboard["Dashboard and attention queue"]
+    detail["Stock detail and fingerprint"]
+    guide["Methodology page"]
   end
 
-  subgraph API[App Router API]
-    User[/api/user]
-    Watchlist[/api/watchlist]
-    Thesis[/api/stock/:symbol/thesis]
-    Fingerprint[/api/stock/:symbol/fingerprint]
-    Context[/api/stock/:symbol/market-context]
-    Simulate[/api/admin/simulate-time]
+  subgraph routes[App Router API]
+    userRoute["POST /api/user"]
+    watchlistRoute["GET and POST /api/watchlist"]
+    thesisRoute["GET /api/stock/:symbol/thesis"]
+    fingerprintRoute["GET /api/stock/:symbol/fingerprint"]
+    contextRoute["GET /api/stock/:symbol/market-context"]
+    simulateRoute["POST /api/admin/simulate-time"]
   end
 
-  subgraph Domain[Domain layer]
-    Engine[ThesisChangeEngine]
-    Evaluators[6 independent evaluators]
-    Decay[Correlation + decay]
-    Anomaly[Thesis Fingerprint]
-    Finnhub[Finnhub adapters]
+  subgraph domain[Domain layer]
+    auth["Signed-cookie authentication"]
+    engine["ThesisChangeEngine"]
+    evaluators["Six independent evaluators"]
+    decay["Correlation and decay"]
+    anomaly["Thesis Fingerprint"]
+    priceAdapter["Live-price adapter"]
+    consensusAdapter["Analyst-context adapter"]
   end
 
-  subgraph Storage[Persistence and providers]
-    DB[(PostgreSQL via Prisma)]
-    Market[Finnhub API]
+  subgraph data[Persistence and provider]
+    db[("PostgreSQL via Prisma")]
+    finnhub["Finnhub API"]
   end
 
-  Dashboard --> User
-  Dashboard --> Watchlist
-  Dashboard --> Simulate
-  Detail --> Thesis
-  Detail --> Fingerprint
-  Detail --> Context
-  Watchlist --> Engine
-  Thesis --> Engine --> Evaluators
-  Thesis --> Decay
-  Fingerprint --> Anomaly
-  Context --> Finnhub
-  Watchlist --> Finnhub
-  API --> DB
-  Finnhub --> Market
+  dashboard --> userRoute
+  dashboard --> watchlistRoute
+  dashboard --> simulateRoute
+  detail --> thesisRoute
+  detail --> fingerprintRoute
+  detail --> contextRoute
+  userRoute --> auth
+  auth --> db
+  watchlistRoute --> engine
+  watchlistRoute --> priceAdapter
+  watchlistRoute --> db
+  simulateRoute --> db
+  thesisRoute --> engine
+  thesisRoute --> decay
+  thesisRoute --> db
+  engine --> evaluators
+  fingerprintRoute --> anomaly
+  fingerprintRoute --> db
+  contextRoute --> consensusAdapter
+  priceAdapter --> finnhub
+  consensusAdapter --> finnhub
 ```
 
 ### Read paths
