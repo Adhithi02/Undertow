@@ -107,7 +107,20 @@ export default function Dashboard() {
       .finally(() => { window.clearTimeout(slowTimer); setBooting(false); setSlowBoot(false); });
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  async function connect(event: FormEvent) { event.preventDefault(); setEmailError(""); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setEmailError("That doesn't look like an email — check it and try again."); return; } setBusy(true); setMessage(""); try { const response = await fetch("/api/user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) }); if (!response.ok) throw new Error("Unable to open ledger"); await loadWatchlist(); } catch { setEmailError("We couldn't open your ledger — try again."); } finally { setBusy(false); } }
+  async function openWorkspace(candidateEmail: string) {
+    const normalizedEmail = candidateEmail.trim();
+    setEmailError("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setEmailError("That doesn't look like an email — check it and try again."); return; }
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: normalizedEmail }) });
+      if (!response.ok) throw new Error("Unable to open workspace");
+      setEmail(normalizedEmail);
+      await loadWatchlist();
+    } catch { setEmailError("We couldn't open this workspace — try again."); } finally { setBusy(false); }
+  }
+  async function connect(event: FormEvent) { event.preventDefault(); await openWorkspace(email); }
   async function recordSymbol(ticker: string) {
     if (!ticker.trim()) { addRef.current?.focus(); return; }
     setBusy(true);
@@ -153,7 +166,7 @@ export default function Dashboard() {
   }
 
   if (booting) return <LoadingSkeleton slow={slowBoot} />;
-  if (!loggedIn) return <main className="auth-shell"><div className="auth-content"><h1>Undertow</h1><p className="auth-prompt">Open your ledger.</p><form onSubmit={connect} noValidate className="auth-form"><input value={email} onChange={event => { setEmail(event.target.value); setEmailError(""); }} type="email" placeholder="your email" aria-label="Email address" aria-invalid={Boolean(emailError)} /><button disabled={busy}>{busy ? <><span className="button-spinner" aria-hidden="true" />Opening...</> : "Continue"}</button></form>{emailError && <p className="form-error">{emailError}</p>}<p className="auth-note">Email-only access. Your ledger is yours.</p><Link href="/how-it-works" className="auth-guide-link">How Undertow works ↗</Link></div></main>;
+  if (!loggedIn) return <main className="auth-shell"><div className="auth-content"><h1>Undertow</h1><p className="auth-prompt">Open a workspace.</p><p className="auth-intro">Use an email to create or return to a prototype workspace.</p><form onSubmit={connect} noValidate className="auth-form"><input value={email} onChange={event => { setEmail(event.target.value); setEmailError(""); }} type="email" placeholder="your email" aria-label="Workspace email" aria-invalid={Boolean(emailError)} /><button disabled={busy}>{busy ? <><span className="button-spinner" aria-hidden="true" />Opening...</> : "Open workspace"}</button></form><div className="demo-workspace"><span className="mono">Public demo</span><p>Explore the pre-seeded NVDA conflict and Thesis Fingerprint flow without entering an email.</p><button type="button" onClick={() => openWorkspace("demo@undertow.local")} disabled={busy}>Explore demo workspace ↗</button></div>{emailError && <p className="form-error">{emailError}</p>}<p className="auth-note">Prototype identity only: Undertow does not verify email ownership. Do not use an email that belongs to someone else.</p><Link href="/how-it-works" className="auth-guide-link">How Undertow works ↗</Link></div></main>;
 
   const items = watchlist?.items ?? [];
   const firstLook = !watchlist?.baselineAt;

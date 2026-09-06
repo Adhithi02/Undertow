@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => {
   const user = { id: "user_1", email: "person@example.com", lastVisit: null as Date | null };
   const item = { id: "item_1", userId: user.id, symbol: "AAPL", createdAt: new Date("2026-09-01T00:00:00.000Z") };
-  const snapshot = { id: "snapshot_1", symbol: "AAPL", fetchedAt: new Date("2026-09-04T00:00:00.000Z"), signals: { price: 210, epsSurprise: 12, analystScore: -12 } };
+  // Keep the test inside the 48-hour compounding window regardless of the day it runs.
+  const snapshot = { id: "snapshot_1", symbol: "AAPL", fetchedAt: new Date(), signals: { price: 210, epsSurprise: 12, analystScore: -12 } };
   return {
     user,
     item,
