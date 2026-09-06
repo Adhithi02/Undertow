@@ -104,162 +104,24 @@ The resulting score is bounded to 0–100: **Normal** (<30), **Watch** (30–59)
 
 This consumes snapshot history only. It does not change signal thresholds, evaluator semantics, change-engine orchestration, correlation/compounding, or decay mathematics.
 
-## Low-level architecture
+## Architecture
 
-Undertow is a single Next.js deployment: browser components call App Router handlers; handlers coordinate small domain modules; Prisma persists state in PostgreSQL. There are no background workers or hidden services. The diagrams below name the concrete modules and their ownership boundaries.
-
-### 1. Module and dependency map
+Undertow is one Next.js application. The browser asks the API for a watchlist briefing; the API reads dated snapshots, applies deterministic change logic, and returns only the evidence that crossed a threshold.
 
 ```mermaid
 flowchart TB
-  subgraph browser[Browser components]
-    dashboard["Dashboard"]
-    detail["StockDetail and ThesisFingerprint"]
-  end
+  ui["Dashboard and stock-detail UI"] --> api["Next.js App Router\nvalidation and response assembly"]
 
-  subgraph routes[App Router handlers]
-    userRoute["POST /api/user"]
-    watchlistRoute["GET and POST /api/watchlist"]
-    thesisRoute["GET /api/stock/:symbol/thesis"]
-    fingerprintRoute["GET /api/stock/:symbol/fingerprint"]
-    contextRoute["GET /api/stock/:symbol/market-context"]
-    simulateRoute["POST /api/admin/simulate-time"]
-  end
-
-  subgraph domain[Domain modules]
-    auth["auth.ts"]
-    market["market.ts"]
-    engine["signals/engine.ts"]
-    correlate["signals/correlate.ts"]
-    fingerprint["fingerprint.ts"]
-    cache["cache.ts"]
-  end
-
-  db[(PostgreSQL via Prisma)]
-  finnhub["Finnhub HTTP API"]
-
-  dashboard --> userRoute
-  dashboard --> watchlistRoute
-  dashboard --> simulateRoute
-  detail --> thesisRoute
-  detail --> fingerprintRoute
-  detail --> contextRoute
-
-  userRoute --> auth --> db
-  watchlistRoute --> auth
-  watchlistRoute --> market --> engine
-  watchlistRoute --> cache --> finnhub
-  watchlistRoute --> db
-  thesisRoute --> auth
-  thesisRoute --> market
-  thesisRoute --> correlate
-  fingerprintRoute --> auth
-  fingerprintRoute --> fingerprint --> db
-  contextRoute --> auth
-  contextRoute --> cache
-  simulateRoute --> auth
-  simulateRoute --> db
-  market --> db
+  api --> auth["auth.ts\nsigned cookie session"] --> db[(PostgreSQL via Prisma)]
+  api --> market["market.ts\nbaseline and snapshot lookup"] --> db
+  market --> engine["Change engine\nsix evaluators, decay, compounding"]
+  api --> fingerprint["Thesis Fingerprint\nhistorical anomaly calculation"] --> db
+  api --> provider["Finnhub adapter\n30-second local cache"] --> finnhub["Finnhub"]
 ```
 
-`auth.ts` is the only module that signs or verifies the cookie. `market.ts` is the shared access layer for a latest snapshot, the snapshot before a baseline, staleness, and change-engine dispatch. Finnhub is read-only: a failed call falls back to stored data or returns an explicit unavailable state; it never writes to `ThesisSnapshot`.
-
-### 2. Watchlist read sequence
-
-`GET /api/watchlist` is the central request. It creates a first-visit baseline only after it has assembled the response, so a refresh cannot silently move that baseline.
-
-```mermaid
-sequenceDiagram
-  participant UI as Dashboard
-  participant Route as GET /api/watchlist
-  participant Auth as auth.ts
-  participant DB as PostgreSQL
-  participant Market as market.ts
-  participant Cache as cache.ts
-  participant Finnhub as Finnhub
-
-  UI->>Route: GET with mode live or simulated
-  Route->>Auth: requireUser
-  Auth->>DB: find user from verified cookie id
-  Route->>DB: find watchlist items for user
-  loop Five symbols at a time
-    Route->>Market: latestSnapshot and previousSnapshot
-    Market->>DB: read latest and pre-baseline snapshots
-    alt Live mode
-      Route->>Cache: cached price lookup
-      Cache->>Finnhub: GET quote on cache miss
-      Finnhub-->>Cache: price or failure
-    end
-    Route->>Market: changesSince current and previous
-    Market-->>Route: change events and stale state
-  end
-  opt First visit only
-    Route->>DB: set User.lastVisit
-  end
-  Route-->>UI: item summaries, changes, baselineAt
-```
-
-The route processes watchlist items in chunks of five. A live price is display-only; the six modelled inputs used for change detection always come from the stored snapshot.
-
-### 3. Two independent analysis paths
-
-The thesis briefing and the Thesis Fingerprint share stored snapshots but have different outputs and never alter each other.
-
-```mermaid
-flowchart LR
-  subgraph briefing[Change briefing]
-    previous["Previous snapshot before baseline"] --> evaluators["6 field evaluators"]
-    current["Latest snapshot"] --> evaluators
-    evaluators --> events["Typed change events"]
-    events --> scoring["correlateAndDecay"]
-    scoring --> result["Final severity, age, and compounding"]
-  end
-
-  subgraph anomaly[Thesis Fingerprint]
-    history["2 to 24 prior complete snapshots"] --> normalize["Normalize six dimensions"]
-    newest["Latest snapshot"] --> normalize
-    normalize --> profile["Centroid and dispersion floor"]
-    profile --> distance["RMS standardized distance"]
-    distance --> unusualness["0 to 100 unusualness and axis contributions"]
-  end
-```
-
-For the briefing, each evaluator compares one input in the current and previous snapshot. `correlateAndDecay` applies a 72-hour severity half-life, then adds one severity level when more than one non-neutral signal occurs within 48 hours. For the Fingerprint, `fingerprint.ts` reads at most 25 snapshots, requires two prior complete records, and returns a read-only descriptive score; it does not change briefing thresholds or severities.
-
-### 4. Persistence model
-
-```mermaid
-erDiagram
-  USER {
-    string id PK
-    string email UK
-    datetime lastVisit
-  }
-  WATCHLIST_ITEM {
-    string id PK
-    string userId FK
-    string symbol
-    datetime createdAt
-  }
-  THESIS_SNAPSHOT {
-    string id PK
-    string symbol
-    datetime fetchedAt
-    json signals
-  }
-
-  USER ||--o{ WATCHLIST_ITEM : owns
-```
-
-`WatchlistItem` is unique on `(userId, symbol)`, making duplicate adds idempotent. `ThesisSnapshot` deliberately has no user or watchlist foreign key: snapshot history is global per ticker and is indexed by `(symbol, fetchedAt)`. Its `signals` JSON holds the modelled price and six thesis inputs. This is a demo simplification, not a multi-tenant market-data model.
-
-### 5. Route contracts and write boundaries
-
-- `POST /api/user` validates and normalizes an email, upserts `User`, then emits a 30-day HTTP-only signed cookie. It does not verify email ownership.
-- `GET /api/watchlist` reads `User`, `WatchlistItem`, and `ThesisSnapshot`; it writes `User.lastVisit` only on the first successful read. `POST` and `DELETE` mutate only `WatchlistItem`.
-- `GET /api/stock/[symbol]/thesis`, `fingerprint`, and `market-context` are read-only. Each requires the signed cookie and validates the ticker with Zod.
-- `POST /api/admin/simulate-time` is the only path that creates a new `ThesisSnapshot`; it copies the latest modelled signals and applies deterministic demo deltas.
-- `GET /api/stock/[symbol]/market-context` fetches Finnhub recommendation counts through the 30-second local cache. That response is rendered as supplementary real context and never replaces the modelled `analystScore`.
+- **Meaningful-change path:** `GET /api/watchlist` and the stock detail route compare the latest snapshot with the last snapshot before `User.lastVisit`. Six independent evaluators produce change events; temporal scoring applies decay and cross-signal compounding. A first visit establishes the baseline rather than inventing a change.
+- **Fingerprint path:** the Fingerprint reads the latest 25 stored snapshots for one ticker, compares the newest state with its own history, and returns unusualness plus contributors. It is read-only and never changes briefing severity.
+- **Data boundaries:** `User` owns watchlist entries; snapshots are shared history per ticker. Finnhub supplies optional live price and analyst context through a local cache, but never replaces the six modelled thesis inputs or writes snapshot data.
 
 ## Reliability and edge cases
 
