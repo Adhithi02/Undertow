@@ -54,7 +54,7 @@ export function ThesisFingerprint({ fingerprint, timeline }: { fingerprint: Fing
 
   return <section className={`fingerprint-panel fingerprint-${fingerprint.status}`} aria-labelledby="fingerprint-heading">
     <div className="fingerprint-heading">
-      <div><p className="mono">Experimental ML signal</p><h2 id="fingerprint-heading">Thesis fingerprint</h2><p>Is this modelled thesis state familiar for this stock?</p></div>
+      <div><p className="mono">Experimental deterministic anomaly signal</p><h2 id="fingerprint-heading">Thesis fingerprint</h2><p>Is this modelled thesis state familiar for this stock?</p></div>
       <div className="fingerprint-score"><span>{status}</span><strong>{fingerprint.unusualness ?? "—"}</strong><small>{fingerprint.unusualness === null ? "profile pending" : "unusualness / 100"}</small></div>
     </div>
     <div className="fingerprint-body">

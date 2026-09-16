@@ -28,6 +28,7 @@ export default function StockDetail({ symbol, since, mode: initialMode }: { symb
   const [detail, setDetail] = useState<Detail | null>(null);
   const [fingerprint, setFingerprint] = useState<FingerprintResponse | null>(null);
   const [marketContext, setMarketContext] = useState<MarketContext | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [storedMode, setStoredMode] = useState<"live" | "simulated">("live");
   useEffect(() => {
     if (initialMode) return;
@@ -39,11 +40,18 @@ export default function StockDetail({ symbol, since, mode: initialMode }: { symb
   const mode = initialMode ?? storedMode;
   useEffect(() => {
     const query = since ? `?since=${encodeURIComponent(since)}` : "";
-    fetch(`/api/stock/${symbol}/thesis${query}`, { cache: "no-store" }).then(response => response.json()).then(setDetail);
-    fetch(`/api/stock/${symbol}/fingerprint`, { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(setFingerprint);
-    fetch(`/api/stock/${symbol}/market-context`, { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(setMarketContext);
+    fetch(`/api/stock/${symbol}/thesis${query}`, { cache: "no-store" })
+      .then(response => {
+        if (!response.ok) throw new Error("Failed to load thesis");
+        return response.json();
+      })
+      .then(setDetail)
+      .catch(err => setError(err.message || "Failed to load thesis"));
+    fetch(`/api/stock/${symbol}/fingerprint`, { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(setFingerprint).catch(() => setFingerprint(null));
+    fetch(`/api/stock/${symbol}/market-context`, { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(setMarketContext).catch(() => setMarketContext(null));
   }, [symbol, since]);
   const signalEntries = useMemo(() => Object.entries(detail?.snapshot?.signals ?? {}), [detail]);
+  if (error) return <main className="detail-shell"><p className="mono">Undertow / loading evidence</p><p className="loading-line">{error}</p></main>;
   if (!detail) return <main className="detail-shell"><p className="mono">Undertow / loading evidence</p><p className="loading-line">Reconstructing the thesis...</p></main>;
   const firstVisit = detail.changes.length > 0 && detail.changes.every(change => change.isFirstVisit);
   const sinceVisitChanges = firstVisit ? [] : detail.changes.filter(change => !change.isFirstVisit);

@@ -54,7 +54,7 @@ The application distinguishes provider data, demo inputs, and derived calculatio
 | **Modelled demo data** | Earnings, analyst, ownership, risk, valuation, technical inputs | Seeded and synthetic snapshot fields used to demonstrate the thesis-change workflow |
 | **Derived intelligence** | Thresholds, severity, compounding, decay, Thesis Fingerprint | Deterministic calculations over available snapshots; not predictions or investment advice |
 
-The six thesis inputs are **not** represented as live earnings, consensus, RSI, ownership, litigation, or risk feeds. Thesis Fingerprint is experimental anomaly detection over Undertow’s available snapshot history; it is not trained on external market data and does not predict returns.
+The six thesis inputs are **not** represented as live earnings, consensus, RSI, ownership, litigation, or risk feeds. Thesis Fingerprint is experimental deterministic anomaly detection over Undertow’s available snapshot history; it is not trained on external market data and does not predict returns.
 
 ## Implementation
 
@@ -83,7 +83,7 @@ Severity is 1 for a meaningful movement, 2 at a delta of 10 or more, and 3 at 15
 
 The detail view applies a 72-hour severity half-life. When multiple distinct non-neutral signals are detected inside 48 hours, they compound attention by one level, capped at severity 3. The original evaluator thresholds remain independent of this temporal layer.
 
-### Thesis Fingerprint — experimental ML signal
+### Thesis Fingerprint — experimental deterministic anomaly signal
 
 The existing change engine identifies delta events. Thesis Fingerprint separately measures whether the newest six-dimensional state is atypical for the same symbol’s available snapshot history.
 
