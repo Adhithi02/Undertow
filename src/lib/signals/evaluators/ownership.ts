@@ -18,6 +18,8 @@ export class OwnershipEvaluator implements SignalEvaluator {
         severity: Math.abs(currOwnership) >= OWNERSHIP_SEVERITY_2 ? 2 : 1,
         summary: `Institutional ownership change is ${currOwnership}%, a modeled sponsorship reading that establishes the baseline.`,
         isFirstVisit: true,
+        currentValue: currOwnership,
+        unit: "%",
       }];
     }
 
@@ -35,6 +37,9 @@ export class OwnershipEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= OWNERSHIP_SEVERITY_3 ? 3 : Math.abs(delta) >= OWNERSHIP_SEVERITY_2 ? 2 : 1,
       summary: `Institutional ownership ${delta > 0 ? "increased" : "declined"} by ${Math.abs(delta)} points, indicating a modeled ${delta > 0 ? "increase" : "decrease"} in institutional sponsorship. ${impact}`,
       isFirstVisit: false,
+      previousValue: prevOwnership,
+      currentValue: currOwnership,
+      unit: "%",
     }];
   }
 }

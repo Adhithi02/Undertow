@@ -18,6 +18,8 @@ export class EarningsEvaluator implements SignalEvaluator {
         severity: Math.abs(currEps) >= EARNINGS_SEVERITY_2 ? 2 : 1,
         summary: `EPS surprise is ${currEps}%, a modeled earnings-surprise reading that establishes the baseline.`,
         isFirstVisit: true,
+        currentValue: currEps,
+        unit: "%",
       }];
     }
 
@@ -36,6 +38,9 @@ export class EarningsEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= EARNINGS_SEVERITY_3 ? 3 : Math.abs(delta) >= EARNINGS_SEVERITY_2 ? 2 : 1,
       summary: `EPS surprise ${delta > 0 ? "increased" : "declined"} by ${Math.abs(delta)} points, indicating a modeled ${delta > 0 ? "improvement" : "weakening"} in earnings surprise. ${impact}`,
       isFirstVisit: false,
+      previousValue: prevEps,
+      currentValue: currEps,
+      unit: "%",
     }];
   }
 }

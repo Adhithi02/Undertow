@@ -58,7 +58,29 @@ export function ThesisFingerprint({ fingerprint, timeline }: { fingerprint: Fing
       <div className="fingerprint-score"><span>{status}</span><strong>{fingerprint.unusualness ?? "—"}</strong><small>{fingerprint.unusualness === null ? "profile pending" : "unusualness / 100"}</small></div>
     </div>
     <div className="fingerprint-body">
-      <div className="fingerprint-read"><p className="fingerprint-interpretation">{fingerprint.interpretation}</p><div className="quality-row"><span><b>{fingerprint.historyCount}</b> prior snapshots</span><span><b>{fingerprint.minimumHistory}</b> required for scoring</span><span>not a return prediction</span></div>{contributors.length > 0 && <div className="contributions"><p className="mono">Primary contributors</p>{contributors.map(dimension => <Contribution key={dimension.key} dimension={dimension} />)}</div>}</div>
+      <div className="fingerprint-read">
+        <p className="fingerprint-interpretation">{fingerprint.interpretation}</p>
+        <div className="quality-row">
+          <span><b>{fingerprint.historyCount}</b> prior snapshots</span>
+          <span><b>{fingerprint.minimumHistory}</b> required for scoring</span>
+          <span>not a return prediction</span>
+        </div>
+        <details className="fingerprint-math-dropdown" style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <summary style={{ cursor: 'pointer', outline: 'none' }}>How is this calculated?</summary>
+          <div style={{ marginTop: '0.5rem', padding: '0.5rem', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}>1. <strong>Normalize:</strong> 6 dimensions are mapped to a bounded scale (e.g. log-scale for P/E).</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}>2. <strong>Centroid:</strong> The historical average profile is calculated from prior snapshots.</p>
+            <p style={{ margin: '0 0 0.5rem 0' }}>3. <strong>RMS Distance:</strong> The standardized geometric distance from the centroid is measured.</p>
+            <p style={{ margin: 0 }}><em>"Above/Below Profile"</em> indicates if the current value is greater or less than its historical average.</p>
+          </div>
+        </details>
+        {contributors.length > 0 && (
+          <div className="contributions">
+            <p className="mono">Primary contributors</p>
+            {contributors.map(dimension => <Contribution key={dimension.key} dimension={dimension} />)}
+          </div>
+        )}
+      </div>
       <ThesisShape fingerprint={fingerprint} />
     </div>
     {timeline.length > 0 && <div className="snapshot-timeline"><div><p className="mono">Historical snapshot timeline</p><span>{timeline.length} available modelled records</span></div><ol>{timeline.map((point, index) => <li key={`${point.fetchedAt}-${index}`} className={point.current ? "current" : ""}><i /><time>{new Date(point.fetchedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time><small>{point.current ? "current" : "recorded"}</small></li>)}</ol></div>}

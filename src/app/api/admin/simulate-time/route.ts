@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       const latest = await prisma.thesisSnapshot.findFirst({ where: { symbol }, orderBy: { fetchedAt: "desc" } });
       if (!latest) return null;
       const signals = latest.signals && typeof latest.signals === "object" && !Array.isArray(latest.signals) ? { ...(latest.signals as Record<string, unknown>) } : {};
-      const deltas: Record<string, number> = { epsSurprise: 8, analystScore: -8, institutionalOwnership: 6, riskScore: 7, peRatio: 6, technicalScore: 8, price: 4 };
+      const deltas: Record<string, number> = { epsSurprise: 12, analystScore: -11, institutionalOwnership: 3, riskScore: 7, peRatio: 2, technicalScore: 9, price: 4 };
       for (const [key, delta] of Object.entries(deltas)) if (typeof signals[key] === "number") signals[key] = (signals[key] as number) + delta;
       return prisma.thesisSnapshot.create({ data: { symbol, fetchedAt: new Date(Date.now() + (input.minutes ?? 1) * 60_000), signals: signals as Prisma.InputJsonValue } });
     }));

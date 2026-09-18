@@ -18,6 +18,7 @@ export class RiskEvaluator implements SignalEvaluator {
         severity: Math.abs(currRisk) >= RISK_SEVERITY_2 ? 2 : 1,
         summary: `Risk score is ${currRisk}, a modeled reading of overall risk exposure that establishes the baseline.`,
         isFirstVisit: true,
+        currentValue: currRisk,
       }];
     }
 
@@ -35,6 +36,8 @@ export class RiskEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= RISK_SEVERITY_3 ? 3 : Math.abs(delta) >= RISK_SEVERITY_2 ? 2 : 1,
       summary: `Risk score ${delta > 0 ? "increased" : "declined"} by ${Math.abs(delta)} points, indicating a modeled ${delta > 0 ? "increase" : "decrease"} in overall risk exposure. ${impact}`,
       isFirstVisit: false,
+      previousValue: prevRisk,
+      currentValue: currRisk,
     }];
   }
 }

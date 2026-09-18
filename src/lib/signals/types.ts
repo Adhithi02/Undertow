@@ -14,6 +14,9 @@ export interface ThesisChange {
   severity: 1 | 2 | 3;
   summary: string;
   isFirstVisit: boolean;
+  previousValue?: number;
+  currentValue?: number;
+  unit?: string;
 }
 
 export interface ThesisSnapshot {

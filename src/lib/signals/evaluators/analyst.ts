@@ -18,6 +18,7 @@ export class AnalystEvaluator implements SignalEvaluator {
         severity: Math.abs(currScore) >= ANALYST_SEVERITY_2 ? 2 : 1,
         summary: `Analyst sentiment score is ${currScore}, a modeled reading of current sentiment that establishes the baseline.`,
         isFirstVisit: true,
+        currentValue: currScore,
       }];
     }
 
@@ -35,6 +36,8 @@ export class AnalystEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= ANALYST_SEVERITY_3 ? 3 : Math.abs(delta) >= ANALYST_SEVERITY_2 ? 2 : 1,
       summary: `Analyst sentiment score ${delta > 0 ? "increased" : "declined"} by ${Math.abs(delta)} points, indicating a modeled ${delta > 0 ? "strengthening" : "weakening"} in sentiment. ${impact}`,
       isFirstVisit: false,
+      previousValue: prevScore,
+      currentValue: currScore,
     }];
   }
 }

@@ -18,6 +18,7 @@ export class ValuationEvaluator implements SignalEvaluator {
         severity: currPe >= 30 ? 2 : 1,
         summary: `P/E is ${currPe} relative to the modeled valuation baseline. Stretch versus that baseline is the first thing a holder pays for.`,
         isFirstVisit: true,
+        currentValue: currPe,
       }];
     }
 
@@ -35,6 +36,8 @@ export class ValuationEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= VALUATION_SEVERITY_3 ? 3 : Math.abs(delta) >= VALUATION_SEVERITY_2 ? 2 : 1,
       summary: `P/E ${delta > 0 ? "increased" : "decreased"} materially relative to the modeled valuation baseline, ${impact}`,
       isFirstVisit: false,
+      previousValue: prevPe,
+      currentValue: currPe,
     }];
   }
 }

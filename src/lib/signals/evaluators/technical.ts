@@ -18,6 +18,7 @@ export class TechnicalEvaluator implements SignalEvaluator {
         severity: Math.abs(currScore) >= TECHNICAL_SEVERITY_2 ? 2 : 1,
         summary: `Technical score is ${currScore}, a modeled momentum reading that establishes the baseline — not a thesis by itself.`,
         isFirstVisit: true,
+        currentValue: currScore,
       }];
     }
 
@@ -35,6 +36,8 @@ export class TechnicalEvaluator implements SignalEvaluator {
       severity: Math.abs(delta) >= TECHNICAL_SEVERITY_3 ? 3 : Math.abs(delta) >= TECHNICAL_SEVERITY_2 ? 2 : 1,
       summary: `Technical score ${delta > 0 ? "strengthened" : "weakened"} by ${Math.abs(delta)} points, indicating ${delta > 0 ? "stronger" : "weaker"} modeled technical momentum. ${impact}`,
       isFirstVisit: false,
+      previousValue: prevScore,
+      currentValue: currScore,
     }];
   }
 }
